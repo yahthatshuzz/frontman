@@ -1,119 +1,72 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { z } from 'zod';
+import type { ScoreData } from './store';
 
-const DeliveryScoreSchema = z.object({
-  overallScore: z.number().min(0).max(100),
-  pace: z.object({
-    wordsPerMinute: z.number(),
-    verdict: z.string(),
-  }),
-  fillerWords: z.object({
-    count: z.number(),
-    verdict: z.string(),
-  }),
-  eyeContact: z.object({
-    percentage: z.number().min(0).max(100),
-    verdict: z.string(),
-  }),
-  energy: z.object({
-    loudness: z.number(),
-    pitchVariation: z.number(),
-    verdict: z.string(),
-  }),
-  tips: z.array(z.string()).length(3),
-  moments: z.array(z.object({
-    timeMs: z.number(),
-    feedback: z.string(),
-  })),
-});
-
-export type DeliveryScore = z.infer<typeof DeliveryScoreSchema>;
-
-export async function scoreDelivery(
+export async function scoreWithClaude(
   transcript: string,
+  durationSec: number,
   audioMetrics: { loudness: number; pitchVariation: number },
-  eyeContactData: { contactPercentage: number },
-  apiKey?: string
-): Promise<DeliveryScore> {
-  if (!apiKey) {
-    return getMockScore();
-  }
+  eyeContactPct: number,
+): Promise<ScoreData> {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) return getMockScore();
 
   const client = new Anthropic({ apiKey });
 
-  const prompt = `Score this video take delivery based on the transcript, audio metrics, and eye contact data.
-
-Transcript:
-${transcript}
-
-Audio Metrics:
-- Loudness (0-100): ${audioMetrics.loudness}
-- Pitch Variation (0-100): ${audioMetrics.pitchVariation}
-
-Eye Contact: ${eyeContactData.contactPercentage}%
-
-Analyze:
-1. Pace: Calculate words per minute. Target is 120-150 WPM for presentation.
-2. Filler Words: Count "um", "uh", "like", "you know" etc. Fewer is better.
-3. Eye Contact: Percentage looking at camera. Target 70%+.
-4. Energy: Combine loudness and pitch variation for engagement (0-100).
-5. Tips: Give 3 specific, actionable tips for the next take.
-6. Moments: Mark 2-3 specific timestamps with feedback.
-
-Respond with valid JSON matching this exact structure:
-{
-  "overallScore": <0-100>,
-  "pace": { "wordsPerMinute": <number>, "verdict": "<1 sentence>" },
-  "fillerWords": { "count": <number>, "verdict": "<1 sentence>" },
-  "eyeContact": { "percentage": <0-100>, "verdict": "<1 sentence>" },
-  "energy": { "loudness": <0-100>, "pitchVariation": <0-100>, "verdict": "<1 sentence>" },
-  "tips": ["<tip1>", "<tip2>", "<tip3>"],
-  "moments": [
-    { "timeMs": <milliseconds>, "feedback": "<feedback>" },
-    { "timeMs": <milliseconds>, "feedback": "<feedback>" },
-    { "timeMs": <milliseconds>, "feedback": "<feedback>" }
-  ]
-}`;
-
   const response = await client.messages.create({
-    model: 'claude-opus-4-7',
+    model: 'claude-sonnet-4-6',
     max_tokens: 1024,
     messages: [
       {
         role: 'user',
-        content: prompt,
+        content: `Score this video take. Respond ONLY with JSON, no markdown.
+
+Transcript: "${transcript}"
+Duration: ${durationSec}s
+Audio loudness (0-100): ${audioMetrics.loudness}
+Pitch variation (0-100): ${audioMetrics.pitchVariation}
+Eye contact: ${eyeContactPct}%
+
+Return this exact JSON shape:
+{
+  "overall": <0-100>,
+  "pace": { "wpm": <number>, "verdict": "<1 sentence>" },
+  "fillers": { "count": <number>, "perMinute": <number> },
+  "eyeContact": { "percentage": <0-100>, "verdict": "<1 sentence>" },
+  "energy": { "loudness": <0-100>, "pitchVariation": <0-100>, "verdict": "<1 sentence>" },
+  "tips": ["<tip1>", "<tip2>", "<tip3>"],
+  "moments": [{ "timeMs": <ms>, "label": "<feedback>" }]
+}`,
       },
     ],
   });
 
   const text = response.content[0].type === 'text' ? response.content[0].text : '';
   const jsonMatch = text.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) throw new Error('No JSON in response');
+  if (!jsonMatch) return getMockScore();
 
-  const parsed = JSON.parse(jsonMatch[0]);
-  return DeliveryScoreSchema.parse(parsed);
+  return JSON.parse(jsonMatch[0]) as ScoreData;
 }
 
-export function getMockScore(): DeliveryScore {
+export function getMockScore(): ScoreData {
   return {
-    overallScore: 78,
-    pace: { wordsPerMinute: 135, verdict: 'Good pace, natural rhythm.' },
-    fillerWords: { count: 2, verdict: 'Minimal fillers, very clean.' },
-    eyeContact: { percentage: 82, verdict: 'Strong eye contact with lens.' },
+    overall: 78,
+    pace: { wpm: 135, verdict: 'Natural rhythm, well-paced for presentation.' },
+    fillers: { count: 2, perMinute: 0.8 },
+    eyeContact: { percentage: 82, verdict: 'Strong connection with the lens.' },
     energy: {
       loudness: 72,
       pitchVariation: 65,
-      verdict: 'Engaged delivery, consistent energy.',
+      verdict: 'Engaged delivery with consistent energy.',
     },
     tips: [
-      'Vary your pitch more—aim for 20% wider range to drive home key points.',
-      'Pause 2 seconds between topics for emphasis and audience absorption.',
-      'Lean slightly forward on the close—you drift back at the end.',
+      'Vary your pitch more on key points for emphasis.',
+      'Pause 2 seconds between topics to let ideas land.',
+      'Lean slightly forward on the close for confidence.',
     ],
     moments: [
-      { timeMs: 0, feedback: 'Strong intro, good energy.' },
-      { timeMs: 25000, feedback: 'Slight stumble on "infrastructure"—take again.' },
-      { timeMs: 48000, feedback: 'Perfect close, confident finish.' },
+      { timeMs: 0, label: 'Strong opening energy' },
+      { timeMs: 25000, label: 'Slight hesitation mid-sentence' },
+      { timeMs: 48000, label: 'Confident, clean finish' },
     ],
   };
 }
