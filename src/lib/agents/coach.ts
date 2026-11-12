@@ -31,7 +31,7 @@ export function transcriptionReady(): boolean {
   return !!process.env.DEEPGRAM_API_KEY;
 }
 
-async function transcribe(url: string): Promise<{ words: Word[]; transcript: string } | null> {
+export async function transcribe(url: string): Promise<{ words: Word[]; transcript: string } | null> {
   const key = process.env.DEEPGRAM_API_KEY;
   if (!key) return null;
   const res = await fetch("https://api.deepgram.com/v1/listen?model=nova-3&smart_format=true&punctuate=true&filler_words=true", {

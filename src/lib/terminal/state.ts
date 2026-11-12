@@ -66,7 +66,7 @@ export async function saveTerminalState(ctx: Ctx, businessId: string | null, sta
   }
   // Server-written results (story bank, brand deep dive) survive an autosave that raced ahead of them.
   const prev = (b.terminal ?? {}) as TerminalState;
-  for (const k of ["bank", "audit"]) {
+  for (const k of ["bank", "audit", "renders"]) {
     const v = next[k];
     const empty = v == null || (Array.isArray(v) && v.length === 0);
     if (empty && prev[k] != null) next[k] = prev[k];
@@ -86,7 +86,7 @@ export async function saveTerminalState(ctx: Ctx, businessId: string | null, sta
 }
 
 
-async function ownBusiness(ctx: Ctx, businessId: string): Promise<Business> {
+export async function ownBusiness(ctx: Ctx, businessId: string): Promise<Business> {
   const b = await store().getBusiness(businessId);
   if (!b || !canSee(ctx, b)) throw Object.assign(new Error("Finish the company questions first."), { status: 404 });
   return b;

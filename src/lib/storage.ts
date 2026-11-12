@@ -99,3 +99,13 @@ export async function readLocal(p: string): Promise<Buffer> {
 export function isCloudStorage(): boolean {
   return cloud();
 }
+
+/** Server-side upload (rendered edits). */
+export async function putObject(p: string, body: ArrayBuffer, mime: string): Promise<void> {
+  if (!cloud()) {
+    await writeLocal(p, body);
+    return;
+  }
+  const { error } = await sb().storage.from(BUCKET).upload(p, body, { contentType: mime, upsert: true });
+  if (error) throw new Error(`Couldn't save the video: ${error.message}.`);
+}

@@ -168,7 +168,7 @@ var S={cat:'origin',len:2,end:'offer',offer:'We\'re opening Sandlot to a few cam
 var CO_KEY='frontman-company';
 /* Live app: window.FM_BOOT comes from the server (signed-in user, their business, saved state). */
 var BOOT=window.FM_BOOT||null,LIVE=!!BOOT;
-var SAVE_KEYS=['co','onboarded','offer','approved','edits','scheduled','custom','approvedIds','rhythm','connected','style','myStyles','defStyle','bank','audit','chat','cat'];
+var SAVE_KEYS=['co','onboarded','offer','approved','edits','scheduled','custom','approvedIds','rhythm','connected','style','myStyles','defStyle','bank','audit','chat','cat','refStyles','refs'];
 if(LIVE){
   S.co={name:'',role:'',company:'',site:'',one:'',ind:'',aud:[],soc:{ig:'',tt:'',yt:'',li:''},look:S.co.look,accent:S.co.accent,goal:'trust',mins:60,cam:'natural',where:'phone'};
   S.offer='';S.approved=[];S.edits=[];S.scheduled=[];S.custom=[];S.approvedIds={};S.connected={ig:false,tt:false,yt:false,li:false};S.postInit=1;S.bank=[];S.rhythm={per:5,days:[0,1,2,3,4],auto:true,mode:'best'};S.postSel=null;
@@ -666,7 +666,7 @@ V.edit.after=function(){
     rd.addEventListener('drop',function(e){var f=e.dataTransfer&&e.dataTransfer.files[0];if(f)startRef(f.name,f.name)});
     q('ref-form').onsubmit=function(e){e.preventDefault();var v=q('ref-in').value.trim();if(!v){q('ref-in').focus();return}startRef('"'+v.slice(0,40)+(v.length>40?'…':'')+'"',v)};
     q('ref-in').onkeydown=function(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();q('ref-form').requestSubmit()}}}
-  if(s.ref&&s.ref.stage==='run'){[0,1,2,3,4].forEach(function(i){refT.push(setTimeout(function(){var el=document.querySelector('[data-rr="'+i+'"]');if(el)el.classList.add('run')},i*(reduce?20:380)))});
+  if(s.ref&&s.ref.stage==='run'&&!LIVE){[0,1,2,3,4].forEach(function(i){refT.push(setTimeout(function(){var el=document.querySelector('[data-rr="'+i+'"]');if(el)el.classList.add('run')},i*(reduce?20:380)))});
     refT.push(setTimeout(function(){if(!S.edits[0]||S.edits[0]!==s)return;s.ref.stage='done';if(S.myStyles.indexOf(s.ref.m.style)<0)S.myStyles.push(s.ref.m.style);S.style=s.ref.m.style;if(route()==='edit')keep();toast('Re-edited to match your reference')},5*(reduce?20:380)+500))}
   var rt=q('ref-tpl');if(rt){rt.onclick=function(){FORMATS.unshift({id:'m'+Date.now(),mine:1,name:'Like '+s.ref.name.replace(/\.[^.]+$/,'').slice(0,30),pillar:s.pillar,style:s.ref.m.style,scene:'desk',hook:s.hook,beats:['Hook on screen, 2 seconds','Cut every '+s.ref.m.cut,'Captions '+s.ref.m.caps,s.ref.m.extras[0]],why:'Built from a reference you uploaded.',uses:'',hot:''});toast('Saved to your templates in the Library')};
     q('ref-undo').onclick=function(){S.style=s.ref.prev;s.ref=null;keep()};q('ref-new').onclick=function(){s.ref=null;keep()}}
@@ -1257,6 +1257,47 @@ if(LIVE){
     var html;try{html=deliveryOrig(s)}finally{takesOf=keepTO;takeData=takeDataOrig}
     return html.replace('<span class="tag warn">Simulated</span>','')+vids};
   var shootAfterCoach=V.shoot.after;V.shoot.after=function(){shootAfterCoach();document.querySelectorAll('[data-coach]').forEach(function(b){b.onclick=function(){var t=LSH.takes.filter(function(x){return x.id===b.getAttribute('data-coach')})[0];if(t)coachLive(t.id,t.url)}})};
+}
+/* ---------- Live Edit: reference analysis, Claude edit plan, Creatomate render ---------- */
+var REF_FONT={sans:SANS,grotesk:BRIC,serif:FRAU,mono:MONO,typewriter:TYPE},REF_LOOK={none:'',warm:'sepia(.25) saturate(1.1)',vhs:'sepia(.35) saturate(1.25)',bw:'grayscale(1) contrast(1.15)',grain:'contrast(1.1) sepia(.2)'};
+function refStyle(p){var c=p.captions||{},o={name:'Like '+String(p.name||'reference').replace(/\.[^.]+$/,'').slice(0,28),by:'You',font:REF_FONT[c.font]||SANS,w:800,size:19,color:c.color||'#fff',hl:c.highlight||'#FFD60A',mine:1};
+  if(c.letterCase==='upper')o.upper=1;if(c.letterCase==='lower')o.lower=1;if(c.box==='glass'){o.bg='rgba(0,0,0,.45)';o.radius=12}else if(c.box==='solid'){o.bg='#111';o.radius=6}else o.shadow='0 2px 10px rgba(0,0,0,.55)';
+  if(p.look&&p.look!=='none'){o.shot=REF_LOOK[p.look];if(p.look==='grain')o.grain=1}return o}
+if(LIVE){
+  S.refStyles=S.refStyles||{};S.refs=S.refs||[];for(var rk in S.refStyles)STYLE_LIB[rk]=S.refStyles[rk];
+  var editOrig=V.edit,editAfterOrig=V.edit.after,edPoll=null,edLoaded=false;
+  var bestLive=function(ids){var ts=LSH.takes.filter(function(t){return (ids||[]).indexOf(t.id)>-1});return ts.sort(function(a,b){return ((b.coach&&b.coach.score)||-1)-((a.coach&&a.coach.score)||-1)})[0]||null};
+  var finalCard=function(s){var r=s.render,ready=!!(s.takeIds&&s.takeIds.length);
+    var body=!r?'<p class="muted" style="font-size:14px">Claude picks your best take, cuts the dead air and restarts, times the captions to your words, and renders a finished 9:16 MP4 in the style on the left.</p><div class="row"><button class="btn primary" id="ed-go" type="button"'+(ready?'':' disabled')+'>Make the final video</button></div>'+(ready?'':'<p class="faint" style="font-size:12.5px">Record or upload a take in Shoot first.</p>')
+      :r.status==='rendering'?'<p class="muted" style="font-size:14px">Rendering… usually about a minute. You can leave this page.</p>'
+      :r.status==='failed'?'<p class="muted" style="font-size:14px">'+esc(r.error||'The render failed.')+'</p><button class="btn" id="ed-go" type="button">Try again</button>'
+      :'<video src="'+esc(r.url||'')+'" controls playsinline style="width:100%;max-width:280px;aspect-ratio:9/16;border-radius:18px;background:#000;justify-self:center"></video><div class="row"><a class="btn sm" href="'+esc(r.url||'#')+'" download>Download MP4</a><button class="btn sm plain" id="ed-go" type="button">Render again with this style</button></div>';
+    return '<section class="glass pad stack" style="gap:10px"><div class="row between"><h2>Final video</h2>'+(r&&r.status==='done'?'<span class="tag good">Ready</span>':'')+'</div>'+body+(r&&r.did&&r.did.length?'<ul class="did">'+r.did.map(function(x){return '<li>'+esc(x)+'</li>'}).join('')+'</ul>':'')+'</section>'};
+  V.edit=function(){var s=S.edits[0];if(s){var b=bestLive(s.takeIds);if(b)s.clip=b.url;else if(!edLoaded){edLoaded=true;refreshTakes().then(function(){if(route()==='edit')render()})}}
+    var h=editOrig();if(!s)return h;h=h.replace('<span class="tag warn">Simulated</span>','');
+    return h.replace('<div class="stack"><section class="glass pad refbox">','<div class="stack">'+finalCard(s)+'<section class="glass pad refbox">')};
+  var pollRender=function(s){clearInterval(edPoll);if(!s.render||s.render.status!=='rendering')return;edPoll=setInterval(function(){
+    fetch('/api/terminal/edit/'+encodeURIComponent(s.render.id)+'?b='+encodeURIComponent(BOOT.businessId),{cache:'no-store'}).then(function(r){return r.json()}).then(function(d){if(!d.render)return;var was=s.render.status;s.render=d.render;if(d.render.status!=='rendering'){clearInterval(edPoll);saveState();if(was!==d.render.status){toast(d.render.status==='done'?'Your video is ready':'The render failed');if(route()==='edit'){var y=window.scrollY;render();window.scrollTo(0,y)}}}}).catch(function(){})},5000)};
+  V.edit.after=function(){var s=S.edits[0];
+    if(s&&s.ref&&s.ref.stage==='run'&&!s.ref.live){s.ref=null}
+    editAfterOrig();if(!s)return;var q=function(id){return document.getElementById(id)};
+    var go=q('ed-go');if(go)go.onclick=function(){go.disabled=true;go.textContent='Starting…';var st=STYLE_LIB[S.style]||STYLE_LIB.bold;
+      api('/api/terminal/edit',{businessId:BOOT.businessId,takeIds:s.takeIds||[],scriptId:s.sid||'',title:s.title,hook:s.hook,text:s.text||'',style:{font:st.font,w:st.w,color:st.color,hl:st.hl,hlbg:st.hlbg,bg:st.bg,upper:st.upper,lower:st.lower,ital:st.ital},note:(q('ref-in')&&q('ref-in').value)||'',reference:s.ref&&s.ref.profile||null})
+        .then(function(d){s.render=d.render;saveState();render();pollRender(s)},function(e){go.disabled=false;go.textContent='Make the final video';toast(e.message)})};
+    pollRender(s);
+    var startRef=function(name,file,note){s.ref={name:name,stage:'run',live:1,prev:S.style,m:{cut:'',caps:'',style:S.style,extras:[]}};var y=window.scrollY;render();window.scrollTo(0,y);
+      document.querySelectorAll('[data-rr]').forEach(function(el){el.classList.add('run')});
+      (file?sampleTake(file,40):Promise.resolve({frames:[],loudness:[],duration:0})).then(function(p){p.businessId=BOOT.businessId;p.name=name;p.note=note||'';return api('/api/terminal/reference',p)}).then(function(d){
+        var p=d.profile,key='ref_'+Date.now().toString(36);STYLE_LIB[key]=refStyle(p);S.refStyles[key]=STYLE_LIB[key];if(S.myStyles.indexOf(key)<0)S.myStyles.push(key);
+        S.refs.unshift({key:key,name:p.name||name,profile:p,at:new Date().toISOString()});S.style=key;
+        s.ref={name:name,stage:'done',prev:s.ref&&s.ref.prev,profile:p,m:{cut:(Math.round(p.cutEverySeconds*10)/10)+' s',caps:p.captions.wordsPerLine+' words at a time',style:key,extras:p.extras||[]}};
+        saveState();toast('Studied your reference');if(route()==='edit')render()},function(e){s.ref=null;toast(e.message);if(route()==='edit')render()})};
+    var ru=q('ref-up'),rd=q('ref-drop'),rf=q('ref-form');
+    if(ru){ru.onchange=function(){var f=ru.files[0];if(f)startRef(f.name,f,'')};
+      var rd2=rd.cloneNode(true);rd.parentNode.replaceChild(rd2,rd);rd=rd2;
+      ['dragenter','dragover'].forEach(function(ev){rd.addEventListener(ev,function(e){e.preventDefault();rd.classList.add('over')})});['dragleave','drop'].forEach(function(ev){rd.addEventListener(ev,function(e){e.preventDefault();rd.classList.remove('over')})});
+      rd.addEventListener('drop',function(e){var f=e.dataTransfer&&e.dataTransfer.files[0];if(f)startRef(f.name,f,'')});
+      rf.onsubmit=function(e){e.preventDefault();var v=q('ref-in').value.trim();if(!v){q('ref-in').focus();return}startRef('"'+v.slice(0,40)+(v.length>40?'…':'')+'"',null,v)}}};
 }
 var ROUTES=['onboard','build','home','studio','shoot','edit','post','library','insights','brand','rec'];
 var SUB='';
