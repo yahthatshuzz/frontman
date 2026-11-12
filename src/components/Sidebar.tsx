@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 
 export function Sidebar({ email, local }: { email: string | null; local: boolean }) {
   const path = usePathname();
-  const on = (href: string) => (href === "/" ? path === "/" || path.startsWith("/b/") : path.startsWith(href));
+  const on = (href: string) => (href === "/workspace" ? path === "/workspace" || path.startsWith("/b/") : path.startsWith(href));
   return (
     <aside className="side">
       <Link className="brand" href="/">
@@ -17,7 +17,8 @@ export function Sidebar({ email, local }: { email: string | null; local: boolean
       </Link>
       <nav className="nav" aria-label="Main">
         <div className="nav-label">Workspace</div>
-        <Link className={on("/") ? "on" : ""} href="/">
+        <Link href="/">Open the Terminal</Link>
+        <Link className={on("/workspace") ? "on" : ""} href="/workspace">
           Businesses
         </Link>
         <Link className={on("/new") ? "on" : ""} href="/new">

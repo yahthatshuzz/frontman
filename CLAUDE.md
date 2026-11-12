@@ -32,6 +32,22 @@ and the Terminal edits and posts to Instagram, TikTok, YouTube Shorts, and Linke
   `SUPABASE_SERVICE_ROLE_KEY` are set, otherwise `.data/db.json`. Schema in `supabase/migrations`.
 - No API key means demo mode: `src/lib/mock.ts` returns clearly labeled sample output.
 
+## The Terminal app (what owners use)
+
+`/` serves the Terminal: the design prototype turned into the real app. `src/app/route.ts` returns one HTML page
+(markup in `src/lib/terminal/body.ts`, styles `public/terminal/terminal.css`, app `public/terminal/app.js`) with
+`window.FM_BOOT` (signed-in user, their business, saved state). app.js is a vanilla hash-routed SPA (Home, Studio, Shoot,
+Edit, Post, Library, Insights, Brand). In live mode (`LIVE`) it drops all sample data, loads `BOOT.state`, and autosaves
+its state (the keys in `SAVE_KEYS`) to `PUT /api/terminal/state`, which stores it on `business.terminal` and mirrors the
+onboarding answers into the business fields the agents read (`src/lib/terminal/state.ts`).
+- Studio's story bank (`S.bank`, same shape as the prototype's `CATS`) is written by `src/lib/agents/storyBank.ts`
+  (`POST /api/terminal/bank`), run from the onboarding build screen or the Studio's empty state.
+- "Tell my story" drafts instantly in the browser, then `POST /api/terminal/story` has Claude rewrite it from the
+  owner's answers.
+- Sections still showing example numbers say so in the UI. Wire each to real data before removing that note.
+- Model per agent: `modelFor()` in `src/lib/claude.ts` (Opus 5.5 for writing and judging, Haiku 5.5 for per-frame checks).
+- The older React dashboard (businesses list, script board, API keys, Shoot tab) lives under `/workspace`.
+
 ## Layout
 
 ```

@@ -23,15 +23,29 @@ interface StructuredRequest {
   schema: Record<string, unknown>;
   maxTokens: number;
   effort?: "low" | "medium" | "high" | "xhigh" | "max";
+  /** Defaults to MODEL. Use modelFor() so each agent's model can be changed with an env var. */
+  model?: string;
+}
+
+/**
+ * Model per agent. Writing and judging use Opus 5.5; per-frame checks use Haiku 5.5 (about 40x cheaper).
+ * Override any of them with FRONTMAN_MODEL_<AGENT> (e.g. FRONTMAN_MODEL_FRAMES=claude-sonnet-5-5).
+ */
+export type Agent = "story" | "scripts" | "brand" | "onboarding" | "captions" | "edit" | "coach" | "frames";
+const FAST_AGENTS: Agent[] = ["frames"];
+export function modelFor(agent: Agent): string {
+  const override = process.env[`FRONTMAN_MODEL_${agent.toUpperCase()}`];
+  if (override) return override;
+  return FAST_AGENTS.includes(agent) ? "claude-haiku-5-5" : MODEL;
 }
 
 /**
  * Ask Claude for JSON that matches `schema` (structured outputs).
  * Streams under the hood so long generations don't hit request timeouts.
  */
-export async function structured<T>({ system, prompt, schema, maxTokens, effort = "high" }: StructuredRequest): Promise<T> {
+export async function structured<T>({ system, prompt, schema, maxTokens, effort = "high", model }: StructuredRequest): Promise<T> {
   const stream = anthropic().messages.stream({
-    model: MODEL,
+    model: model ?? MODEL,
     max_tokens: maxTokens,
     system,
     messages: [{ role: "user", content: prompt }],

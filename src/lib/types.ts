@@ -94,6 +94,35 @@ export interface Business {
   error?: string;
   settings: BusinessSettings;
   audienceResearch?: AudienceResearch | null;
+  /** The Terminal app's saved state for this business: onboarding answers, story bank, approved scripts, schedule. */
+  terminal?: TerminalState | null;
+}
+
+/** Onboarding answers from the Terminal (the prototype's `S.co`). */
+export interface CompanyAnswers {
+  name: string;
+  role: string;
+  company: string;
+  site: string;
+  one: string;
+  ind: string;
+  aud: string[];
+  soc: { ig: string; tt: string; yt: string; li: string };
+  look: string;
+  accent: string;
+  goal: string;
+  mins: number;
+  cam: string;
+  where: string;
+  [key: string]: unknown;
+}
+
+/** Everything the Terminal UI keeps per business. Free-form beyond the typed keys; capped in size by the API. */
+export interface TerminalState {
+  co?: Partial<CompanyAnswers>;
+  onboarded?: boolean;
+  updatedAt?: string;
+  [key: string]: unknown;
 }
 
 export type ScriptStatus = "draft" | "approved" | "shot" | "posted";
