@@ -47,6 +47,17 @@ onboarding answers into the business fields the agents read (`src/lib/terminal/s
 - Sections still showing example numbers say so in the UI. Wire each to real data before removing that note.
 - Model per agent: `modelFor()` in `src/lib/claude.ts` (Opus 5.5 for writing and judging, Haiku 5.5 for per-frame checks).
 - The older React dashboard (businesses list, script board, API keys, Shoot tab) lives under `/workspace`.
+- Brand: `src/lib/agents/brandAudit.ts` (master prompt: trust score, known-for, pillar mix and needs, audiences, voice,
+  trust gaps, a review of every onboarding answer, first three moves). Run from the build screen and the Brand page.
+- Shoot (Terminal): Studio approvals become Script rows (`POST /api/terminal/approve`) so the QR, phone recorder and takes
+  work. Delivery coach: `src/lib/agents/coach.ts` (Deepgram words + Haiku per-frame checks + Opus tips); the browser
+  samples frames and loudness (`src/lib/coachSample.ts`, `sampleTake()` in app.js) and posts them to the coach routes.
+- Edit: `src/lib/agents/edit.ts` (edit plan from word timings; reference-video style profiles from sampled frames),
+  `src/lib/render.ts` (Creatomate RenderScript, POST /v2/renders), `src/lib/terminal/edit.ts` (render records on
+  `business.terminal.renders`, finished MP4 copied into storage, own-edit uploads).
+- Post/Insights: `src/lib/social/` (OAuth per platform, tokens sealed with FRONTMAN_TOKEN_KEY, publish, metrics) on the
+  generic `records` table (`kind` = account | post). Supabase pg_cron calls `/api/cron/publish` every 5 minutes with
+  CRON_SECRET (stored in Vault). Insights only shows numbers the platforms return; missing ones show a dash.
 
 ## Layout
 
@@ -90,6 +101,7 @@ src/components/Terminal.tsx  Business view: analysis progress, Brand Brief, scri
 
 ## Roadmap (build in this order)
 
+Steps 1-5 are built in the Terminal (Nov 2026); 3-5 go live as their keys are added (Deepgram, Creatomate, platform apps).
 Steps 1 and 2 shipped (Nov 2026). Notes: data access stays server-side with the service role key and code-level workspace
 checks; RLS is on with no policies (deny all to the publishable key). The Shoot tab polls every 4 s instead of Realtime.
 Uploads are single PUTs to signed URLs (TUS resumable uploads are a later upgrade). Page routes live in `src/app/(app)`.
