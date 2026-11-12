@@ -19,7 +19,8 @@ function anthropic(): Anthropic {
 
 interface StructuredRequest {
   system: string;
-  prompt: string;
+  /** Text, or content blocks (text and images) for vision calls. */
+  prompt: string | Anthropic.ContentBlockParam[];
   schema: Record<string, unknown>;
   maxTokens: number;
   effort?: "low" | "medium" | "high" | "xhigh" | "max";

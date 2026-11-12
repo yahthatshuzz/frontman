@@ -273,4 +273,26 @@ export interface Take {
   status: "uploading" | "ready";
   bytes?: number;
   seconds?: number;
+  /** Delivery coach result, once scored. */
+  coach?: TakeCoach | null;
+}
+
+/** Delivery coach output for one take. Null metrics mean that signal wasn't available (e.g. no transcription key). */
+export interface TakeCoach {
+  score: number;
+  wpm: number | null;
+  fill: number | null;
+  fillers: string[];
+  eye: number | null;
+  energy: number | null;
+  pauses: number | null;
+  clar: number | null;
+  len: number;
+  marks: { at: number; kind: "good" | "warn"; t: string }[];
+  tips: string[];
+  summary: string;
+  transcript: string;
+  /** Word timings from transcription, kept for the Edit stage (cuts and captions). */
+  words: { w: string; s: number; e: number }[];
+  createdAt: string;
 }

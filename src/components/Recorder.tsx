@@ -8,6 +8,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PhoneSession } from "@/lib/shoot";
 import { createTracker, effectiveMode, FALLBACK_NOTE, prepare, speechSupported, TARGET_PRESETS, timedPace } from "@/lib/teleprompter";
 import type { TeleprompterMode, TeleprompterSettings } from "@/lib/types";
+import { sampleTake } from "@/lib/coachSample";
 import { putFile, videoSeconds } from "@/lib/uploadClient";
 
 type Phase = "start" | "ready" | "countdown" | "recording" | "review" | "sending";
@@ -348,6 +349,10 @@ export function Recorder({ token, session }: { token: string; session: PhoneSess
       const done = await fetch(`/api/r/${token}/takes/${j.take.id}/done`, { method: "POST" });
       const dj = await done.json();
       if (!done.ok) throw new Error(dj.error || "The upload didn't finish.");
+      // Score the take in the background: sample frames and loudness here, the server does the rest.
+      sampleTake(blob)
+        .then((p) => fetch(`/api/r/${token}/takes/${j.take.id}/coach`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(p) }))
+        .catch(() => undefined);
       setScripts((cur) => cur.map((s) => (s.id === script.id ? { ...s, takes: s.takes + 1 } : s)));
       setToast(`Take ${script.takes + 1} saved to your dashboard`);
       setTimeout(() => setToast(""), 3000);

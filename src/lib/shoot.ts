@@ -4,6 +4,7 @@
  * phone calls carry a shoot link token, which only reaches its own business.
  */
 import { randomBytes } from "node:crypto";
+import { coachTake } from "./agents/coach";
 import { readingText, normalizeTeleprompter } from "./teleprompter";
 import { newId, store } from "./store";
 import { objectSize, playbackUrl, removeObject, uploadTarget, type UploadTarget } from "./storage";
@@ -164,4 +165,22 @@ export async function deleteTake(business: Business, takeId: string): Promise<vo
   if (!take || take.businessId !== business.id) throw new ShootError("Take not found.", 404);
   await removeObject(take.path).catch(() => undefined);
   await store().deleteTake(take.id);
+}
+
+/** Score a take with the delivery coach and save the result on it. */
+export async function coachTakeFor(business: Business, takeId: string, input: { frames: { t: number; data: string }[]; loudness: number[]; duration: number }): Promise<Take> {
+  const take = await store().getTake(takeId);
+  if (!take || take.businessId !== business.id) throw new ShootError("Take not found.", 404);
+  if (take.status !== "ready") throw new ShootError("Wait for the upload to finish, then try again.", 409);
+  const sc = await store().getScript(take.scriptId);
+  const coach = await coachTake({
+    videoUrl: await playbackUrl(take.path, take.id),
+    duration: input.duration || take.seconds || 0,
+    frames: input.frames.filter((f) => typeof f.data === "string" && f.data.length < 400_000 && Number.isFinite(f.t)).slice(0, 90),
+    loudness: input.loudness.filter((x) => Number.isFinite(x)).slice(0, 1200),
+    script: sc ? readingText(sc) : "",
+  });
+  const saved: Take = { ...take, coach, seconds: take.seconds ?? coach.len };
+  await store().saveTake(saved);
+  return saved;
 }
