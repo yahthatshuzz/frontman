@@ -7,7 +7,7 @@ import { transcribe } from "../agents/coach";
 import { editStyleBrief, effectiveEditStyle } from "../editStyles";
 import { buildRenderScript, getCreatomate, renderReady, startCreatomate, type CaptionStyle } from "../render";
 import type { Ctx } from "../session";
-import { playbackUrl, putObject } from "../storage";
+import { objectSize, playbackUrl, putObject, uploadTarget } from "../storage";
 import { store } from "../store";
 import type { Business, Take } from "../types";
 import { ownBusiness } from "./state";
@@ -116,4 +116,26 @@ export async function studyReference(
   await ownBusiness(ctx, businessId);
   if (!input.frames.length && input.note.split(/\s+/).length < 3) throw new EditError("Upload a reference video, or describe the edit in a few words.");
   return analyzeReference(input);
+}
+
+/** "Upload a finished video": the owner's own edit, posted as-is. Registered as a render so Post treats it the same. */
+export async function startFinishedUpload(ctx: Ctx, businessId: string, input: { title: string; mime: string; bytes: number }) {
+  const b = await ownBusiness(ctx, businessId);
+  const mime = (input.mime || "video/mp4").split(";")[0];
+  if (!/^video\/(mp4|quicktime|x-m4v)$/.test(mime)) throw new EditError("Upload an MP4 or MOV.");
+  const id = `up_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
+  const path = `${b.id}/renders/${id}.${mime === "video/quicktime" ? "mov" : "mp4"}`;
+  const rec: RenderRecord = { id, takeId: "", title: input.title || "Your video", status: "rendering", path, did: ["Your own edit, posted as-is."], seconds: 0, createdAt: new Date().toISOString() };
+  await saveRender(b, rec);
+  return { render: rec, upload: await uploadTarget(path, mime) };
+}
+
+export async function finishFinishedUpload(ctx: Ctx, businessId: string, id: string) {
+  const b = await ownBusiness(ctx, businessId);
+  const rec = ((b.terminal?.renders as Record<string, RenderRecord>) ?? {})[id];
+  if (!rec || !rec.path) throw new EditError("Upload not found.", 404);
+  if ((await objectSize(rec.path)) === null) throw new EditError("The upload didn't finish. Try again.", 409);
+  rec.status = "done";
+  await saveRender(b, rec);
+  return { ...rec, url: await playbackUrl(rec.path, rec.id) };
 }

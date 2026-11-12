@@ -1,7 +1,7 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Format } from "../formats";
 import type { ApiKey, Business, Member, ReferenceVideo, Script, ShootLink, Take } from "../types";
-import type { Store } from "./index";
+import type { Store, StoredRecord } from "./index";
 
 // Rows keep queryable columns flat and the rest of the record in a jsonb `data` column.
 // Schema: supabase/migrations/
@@ -200,6 +200,25 @@ export function supabaseStore(): Store {
     },
     async deleteTake(id) {
       check(await db().from("takes").delete().eq("id", id));
+    },
+    async listRecords<T extends StoredRecord>(kind: string, businessId: string) {
+      const rows = check(await db().from("records").select("data").eq("kind", kind).eq("business_id", businessId).order("created_at", { ascending: false }));
+      return (rows as { data: T }[]).map((r) => r.data);
+    },
+    async dueRecords<T extends StoredRecord>(kind: string, status: string, before: string) {
+      const rows = check(await db().from("records").select("data").eq("kind", kind).eq("status", status).lte("due_at", before).limit(50));
+      return (rows as { data: T }[]).map((r) => r.data);
+    },
+    async getRecord<T extends StoredRecord>(id: string): Promise<T | null> {
+      const rows = check(await db().from("records").select("data").eq("id", id).limit(1));
+      return (rows as { data: T }[])[0]?.data ?? null;
+    },
+    async saveRecord<T extends StoredRecord>(r: T) {
+      check(await db().from("records").upsert({ id: r.id, kind: r.kind, business_id: r.businessId, status: r.status ?? null, due_at: r.dueAt ?? null, created_at: r.createdAt, data: r }));
+      return r;
+    },
+    async deleteRecord(id: string) {
+      check(await db().from("records").delete().eq("id", id));
     },
   };
 }

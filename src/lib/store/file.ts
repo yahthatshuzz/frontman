@@ -2,6 +2,7 @@ import { promises as fs } from "fs";
 import path from "path";
 import type { Format } from "../formats";
 import type { ApiKey, Business, Member, ReferenceVideo, Script, ShootLink, Take, Workspace } from "../types";
+import type { StoredRecord } from "./index";
 import type { Store } from "./index";
 
 interface Db {
@@ -14,6 +15,7 @@ interface Db {
   members: Member[];
   shootLinks: ShootLink[];
   takes: Take[];
+  records: StoredRecord[];
 }
 
 const DB_PATH = path.join(process.cwd(), ".data", "db.json");
@@ -22,9 +24,9 @@ let queue: Promise<unknown> = Promise.resolve();
 async function read(): Promise<Db> {
   try {
     const db = JSON.parse(await fs.readFile(DB_PATH, "utf8")) as Partial<Db>;
-    return { businesses: db.businesses ?? [], scripts: db.scripts ?? [], references: db.references ?? [], formats: db.formats ?? [], apiKeys: db.apiKeys ?? [], workspaces: db.workspaces ?? [], members: db.members ?? [], shootLinks: db.shootLinks ?? [], takes: db.takes ?? [] };
+    return { businesses: db.businesses ?? [], scripts: db.scripts ?? [], references: db.references ?? [], formats: db.formats ?? [], apiKeys: db.apiKeys ?? [], workspaces: db.workspaces ?? [], members: db.members ?? [], shootLinks: db.shootLinks ?? [], takes: db.takes ?? [], records: db.records ?? [] };
   } catch {
-    return { businesses: [], scripts: [], references: [], formats: [], apiKeys: [], workspaces: [], members: [], shootLinks: [], takes: [] };
+    return { businesses: [], scripts: [], references: [], formats: [], apiKeys: [], workspaces: [], members: [], shootLinks: [], takes: [], records: [] };
   }
 }
 
@@ -171,6 +173,28 @@ export function fileStore(): Store {
     async deleteTake(id) {
       await mutate((db) => {
         db.takes = db.takes.filter((t) => t.id !== id);
+      });
+    },
+    async listRecords<T extends StoredRecord>(kind: string, businessId: string) {
+      return (await read()).records.filter((r) => r.kind === kind && r.businessId === businessId).sort((a, b) => b.createdAt.localeCompare(a.createdAt)) as T[];
+    },
+    async dueRecords<T extends StoredRecord>(kind: string, status: string, before: string) {
+      return (await read()).records.filter((r) => r.kind === kind && r.status === status && r.dueAt && r.dueAt <= before) as T[];
+    },
+    async getRecord<T extends StoredRecord>(id: string): Promise<T | null> {
+      return ((await read()).records.find((r) => r.id === id) as T | undefined) ?? null;
+    },
+    saveRecord<T extends StoredRecord>(r: T) {
+      return mutate((db) => {
+        const i = db.records.findIndex((x) => x.id === r.id);
+        if (i >= 0) db.records[i] = r;
+        else db.records.push(r);
+        return r;
+      });
+    },
+    async deleteRecord(id: string) {
+      await mutate((db) => {
+        db.records = db.records.filter((r) => r.id !== id);
       });
     },
   };

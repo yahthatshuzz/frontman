@@ -109,3 +109,14 @@ export async function putObject(p: string, body: ArrayBuffer, mime: string): Pro
   const { error } = await sb().storage.from(BUCKET).upload(p, body, { contentType: mime, upsert: true });
   if (error) throw new Error(`Couldn't save the video: ${error.message}.`);
 }
+
+/** Server-side download (publishing a rendered video). */
+export async function getObject(p: string): Promise<ArrayBuffer> {
+  if (!cloud()) {
+    const b = await readLocal(p);
+    return b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) as ArrayBuffer;
+  }
+  const { data, error } = await sb().storage.from(BUCKET).download(p);
+  if (error || !data) throw new Error(`Couldn't read the video: ${error?.message ?? "missing"}.`);
+  return data.arrayBuffer();
+}

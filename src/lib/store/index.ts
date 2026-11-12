@@ -31,6 +31,21 @@ export interface Store {
   getTake(id: string): Promise<Take | null>;
   saveTake(t: Take): Promise<Take>;
   deleteTake(id: string): Promise<void>;
+  /** Generic records (social accounts, posts). `status` and `dueAt` are queryable for the scheduler. */
+  listRecords<T extends StoredRecord>(kind: string, businessId: string): Promise<T[]>;
+  dueRecords<T extends StoredRecord>(kind: string, status: string, before: string): Promise<T[]>;
+  getRecord<T extends StoredRecord>(id: string): Promise<T | null>;
+  saveRecord<T extends StoredRecord>(r: T): Promise<T>;
+  deleteRecord(id: string): Promise<void>;
+}
+
+export interface StoredRecord {
+  id: string;
+  kind: string;
+  businessId: string;
+  createdAt: string;
+  status?: string;
+  dueAt?: string | null;
 }
 
 /** Supabase when configured, otherwise a local JSON file for development. Businesses come back with defaults filled in. */
