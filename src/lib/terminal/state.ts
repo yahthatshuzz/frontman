@@ -5,7 +5,8 @@
  */
 import { demoMode } from "../claude";
 import { sampleBank, storyFromChat, writeStoryBank, type StoryCategory } from "../agents/storyBank";
-import { createBusiness } from "../service";
+import { brandAudit, sampleAudit, type BrandAudit } from "../agents/brandAudit";
+import { createBusiness, runAnalysis } from "../service";
 import { newId, store } from "../store";
 import { canSee, type Ctx } from "../session";
 import type { Business, CompanyAnswers, Script, TerminalState } from "../types";
@@ -62,6 +63,13 @@ export async function saveTerminalState(ctx: Ctx, businessId: string | null, sta
   if (!b) {
     const f = fieldsFrom(co);
     b = await createBusiness({ ...f, brainDump: str(co.one, 4000), notes: "" }, ctx.workspaceId);
+  }
+  // Server-written results (story bank, brand deep dive) survive an autosave that raced ahead of them.
+  const prev = (b.terminal ?? {}) as TerminalState;
+  for (const k of ["bank", "audit"]) {
+    const v = next[k];
+    const empty = v == null || (Array.isArray(v) && v.length === 0);
+    if (empty && prev[k] != null) next[k] = prev[k];
   }
   const f = fieldsFrom(co);
   const merged: Business = {
@@ -134,4 +142,22 @@ export async function approveFromStudio(
   };
   await store().saveScripts([sc]);
   return sc.id;
+}
+
+/** Website analysis (Brand Brief) for the Terminal's business. Skipped when there's nothing to read. */
+export async function analyzeForTerminal(ctx: Ctx, businessId: string): Promise<{ ran: boolean }> {
+  const b = await ownBusiness(ctx, businessId);
+  if (!b.website && !b.brainDump) return { ran: false };
+  await runAnalysis(b.id);
+  return { ran: true };
+}
+
+/** The Brand page's deep dive. Saved on the Terminal state as `audit`. */
+export async function runBrandAudit(ctx: Ctx, businessId: string): Promise<BrandAudit> {
+  const b = await ownBusiness(ctx, businessId);
+  const co = (b.terminal?.co ?? {}) as Partial<CompanyAnswers>;
+  const audit = demoMode() ? sampleAudit(b, co) : await brandAudit(b, co);
+  const fresh = (await store().getBusiness(b.id)) ?? b;
+  await store().saveBusiness({ ...fresh, terminal: { ...(fresh.terminal ?? {}), audit, updatedAt: new Date().toISOString() } });
+  return audit;
 }
