@@ -78,9 +78,9 @@ export interface PhoneSession {
 }
 
 /** What the phone recorder needs. Marks the link opened so the dashboard shows "Phone connected". */
-export async function phoneSession(token: string): Promise<PhoneSession> {
+export async function phoneSession(token: string, opts: { preview?: boolean } = {}): Promise<PhoneSession> {
   const { link, business } = await linkFromToken(token);
-  if (!link.openedAt) await store().saveShootLink({ ...link, openedAt: new Date().toISOString() });
+  if (!link.openedAt && !opts.preview) await store().saveShootLink({ ...link, openedAt: new Date().toISOString() });
   const [scripts, takes] = await Promise.all([store().listScripts(business.id), store().listTakes(business.id)]);
   const ready = scripts.filter(shootable);
   return {

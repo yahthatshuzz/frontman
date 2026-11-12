@@ -6,9 +6,9 @@
 import { demoMode } from "../claude";
 import { sampleBank, storyFromChat, writeStoryBank, type StoryCategory } from "../agents/storyBank";
 import { createBusiness } from "../service";
-import { store } from "../store";
+import { newId, store } from "../store";
 import { canSee, type Ctx } from "../session";
-import type { Business, CompanyAnswers, TerminalState } from "../types";
+import type { Business, CompanyAnswers, Script, TerminalState } from "../types";
 
 export const MAX_STATE_BYTES = 400_000;
 
@@ -100,4 +100,38 @@ export async function tellMyStory(ctx: Ctx, businessId: string, title: string, t
   const co = (b.terminal?.co ?? {}) as Partial<CompanyAnswers>;
   if (demoMode()) return { ...sampleBank(b, co)[0], id: `c${Date.now()}`, name: title || "Your story", custom: true, beats: [transcript.slice(0, 400) || "[FILL: your story]", ...sampleBank(b, co)[0].beats.slice(1)] };
   return storyFromChat(b, co, title, transcript);
+}
+
+/** A script the owner approved in the Studio becomes a real Script row, so Shoot, Edit and Post can use it. */
+export async function approveFromStudio(
+  ctx: Ctx,
+  businessId: string,
+  item: { title: string; pillar: string; hook: string; text: string; secs: number; sid?: string },
+): Promise<string> {
+  const b = await ownBusiness(ctx, businessId);
+  const pillar = (["teach", "show", "believe", "entertain"].includes(item.pillar) ? item.pillar : "believe") as Script["pillar"];
+  if (item.sid) {
+    const existing = await store().getScript(item.sid);
+    if (existing && existing.businessId === b.id) return existing.id;
+  }
+  const sc: Script = {
+    id: newId(),
+    businessId: b.id,
+    createdAt: new Date().toISOString(),
+    batch: `Studio · ${new Date().toISOString().slice(0, 10)}`,
+    pillar,
+    formatId: "studio",
+    title: str(item.title, 200) || "Untitled",
+    hooks: [str(item.hook, 300)],
+    selectedHook: 0,
+    body: str(item.text, 8000),
+    shotNotes: [],
+    cta: "",
+    platforms: ["instagram", "tiktok", "youtube_shorts", "linkedin"],
+    estSeconds: Math.max(5, Math.round(Number(item.secs) || 45)),
+    whyItBuildsTrust: "",
+    status: "approved",
+  };
+  await store().saveScripts([sc]);
+  return sc.id;
 }

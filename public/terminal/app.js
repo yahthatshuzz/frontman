@@ -551,6 +551,7 @@ V.shoot=function(){
    '<div class="sdet"><b style="font-size:13px">Suggested place to shoot</b><span class="muted">'+esc(scnOf(OLD2SCN[s.scene]||'desk').name)+': '+esc(scnOf(OLD2SCN[s.scene]||'desk').good.toLowerCase())+'.</span><a class="more" href="#scenery" id="go-scn" style="margin:0">See scenery ideas ›</a></div></div></div>'+
   '<div id="coach-wrap">'+deliveryCard(s)+'</div>'+scenery(OLD2SCN[s.scene]||'desk');
 };
+
 function bindTk(){document.querySelectorAll('[data-tk]').forEach(function(b){b.onclick=function(){var s0=S.approved[cur];S.takeSel[s0.title]=+b.getAttribute('data-tk');var cw=document.getElementById('coach-wrap');if(cw){cw.innerHTML=deliveryCard(s0);bindTk()}}})}
 /* the phone recorder: what opens when you scan the code */
 var RM={mode:'full',size:17,speed:26};
@@ -585,7 +586,7 @@ function bindRec(){
 }
 V.rec=function(){return '<div class="rec-full">'+recApp(true)+'</div>'};
 V.rec.after=bindRec;
-function drawQR(cv,seed){var x=cv.getContext('2d'),n=25,u=cv.width/n;seed=seed||7;function r(){seed=(seed*16807)%2147483647;return seed/2147483647}
+function drawQR(cv,seed){if(!arguments[0]||!arguments[0].getContext)return;var x=cv.getContext('2d'),n=25,u=cv.width/n;seed=seed||7;function r(){seed=(seed*16807)%2147483647;return seed/2147483647}
   x.fillStyle='#fff';x.fillRect(0,0,cv.width,cv.height);x.fillStyle='#111';
   for(var i=0;i<n;i++)for(var j=0;j<n;j++){var f=(i<8&&j<8)||(i<8&&j>n-9)||(i>n-9&&j<8);if(!f&&r()>.52)x.fillRect(i*u,j*u,u,u)}
   [[0,0],[n-7,0],[0,n-7]].forEach(function(p){x.fillRect(p[0]*u,p[1]*u,7*u,7*u);x.fillStyle='#fff';x.fillRect((p[0]+1)*u,(p[1]+1)*u,5*u,5*u);x.fillStyle='#111';x.fillRect((p[0]+2)*u,(p[1]+2)*u,3*u,3*u)});}
@@ -1157,6 +1158,43 @@ document.getElementById('redo-ob').onclick=function(){openSheet(false);S.ob=0;lo
   so.onclick=function(){saveNow().then(function(){var f=document.createElement('form');f.method='post';f.action='/auth/signout';document.body.appendChild(f);f.submit()})}})();
 
 /* ---------- router ---------- */
+/* ---------- Live Shoot: real QR links, uploads and takes ---------- */
+if(LIVE){
+  var LSH={links:{},takes:[],openedAt:null,poll:null,busy:false};
+  var shootOrig=V.shoot,shootAfterOrig=V.shoot.after,deliveryOrig=deliveryCard;
+  var liveTakes=function(s){return LSH.takes.filter(function(t){return s&&s.sid&&t.scriptId===s.sid})};
+  takesOf=function(t){var s=S.approved.filter(function(x){return x.title===t})[0];return s?liveTakes(s).length:0};
+  var ensureSid=function(s){if(s.sid)return Promise.resolve(s.sid);return saveNow().then(function(){return api('/api/terminal/approve',{businessId:BOOT.businessId,item:s})}).then(function(d){s.sid=d.scriptId;saveState();return s.sid})};
+  var linkFor=function(s){if(LSH.links[s.sid])return Promise.resolve(LSH.links[s.sid]);return api('/api/businesses/'+BOOT.businessId+'/shoot-link',{scriptId:s.sid}).then(function(d){d.path=new URL(d.url).pathname;LSH.links[s.sid]=d;return d})};
+  var refreshTakes=function(){if(!BOOT.businessId)return Promise.resolve();return fetch('/api/businesses/'+BOOT.businessId+'/takes',{cache:'no-store'}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d)return;var before=LSH.takes.map(function(t){return t.id}).join(),opened=LSH.openedAt;LSH.takes=d.takes;LSH.openedAt=d.phoneOpenedAt;
+    if(route()==='shoot'&&(before!==LSH.takes.map(function(t){return t.id}).join()||opened!==LSH.openedAt)){var y=window.scrollY;render();window.scrollTo(0,y);if(before&&LSH.takes.length)toast('New take saved')}})};
+  var putFile=function(target,file,onp){return new Promise(function(res,rej){var x=new XMLHttpRequest();x.open('PUT',target.url);for(var k in target.headers)x.setRequestHeader(k,target.headers[k]);x.upload.onprogress=function(e){if(e.lengthComputable&&onp)onp(e.loaded/e.total)};x.onload=function(){x.status>=200&&x.status<300?res():rej(new Error(x.status===413?'That video is too big to upload. Export it at 1080p and try again.':'The upload failed ('+x.status+'). Try again.'))};x.onerror=function(){rej(new Error('The connection dropped during the upload. Try again.'))};x.send(file)})};
+  var uploadLive=function(s,files){var arr=[].slice.call(files||[]).filter(function(f){return /^video\//.test(f.type)||/\.(mov|mp4|m4v|webm)$/i.test(f.name)});if(!arr.length){toast('Choose a video file');return}
+    var drop=document.getElementById('drop');var step=function(i){if(i>=arr.length){if(drop)drop.classList.remove('busy');refreshTakes();toast(arr.length+' clip'+(arr.length>1?'s':'')+' uploaded');return}var f=arr[i];
+      ensureSid(s).then(function(){return api('/api/businesses/'+BOOT.businessId+'/takes',{scriptId:s.sid,mime:f.type||'video/mp4',bytes:f.size})}).then(function(d){return putFile(d.upload,f,function(p){if(drop){drop.classList.add('busy');var b=drop.querySelector('b');if(b)b.textContent='Uploading '+(arr.length>1?(i+1)+' of '+arr.length+' · ':'')+Math.round(p*100)+'%'}}).then(function(){return api('/api/takes/'+d.take.id+'/done',{})})}).then(function(){step(i+1)},function(e){if(drop)drop.classList.remove('busy');toast(e.message);render()})};step(0)};
+  V.shoot=function(){var s=S.approved[cur],h=shootOrig();if(!s)return h;var L=s.sid&&LSH.links[s.sid],on=!!LSH.openedAt;
+    h=h.replace(/<canvas id="qr"[^>]*><\/canvas>/,'<div class="qr-live" id="qr" aria-label="QR code that opens the recorder on your phone">'+(L?L.qr:'<span class="faint">Making your code…</span>')+'</div>');
+    h=h.replace(/<div class="qrlink" title="[^"]*">[^<]*<\/div>/,'<div class="qrlink" id="qrlink">'+(L?esc(L.url):'')+'</div>');
+    h=h.replace(/<span class="pair[^"]*" id="pair"><i><\/i><span>[^<]*<\/span><\/span>/,'<span class="pair'+(on?' on':'')+'" id="pair"><i></i><span>'+(on?'Phone connected':'Waiting for your phone…')+'</span></span>');
+    h=h.replace('<p class="faint" style="font-size:12px">Example code. In this preview, record with the phone on the right.</p>','<p class="faint" style="font-size:12px">The code works for 24 hours and only opens your approved scripts. Only share it with yourself.</p>');
+    h=h.replace(/<div class="iph" aria-label="Phone recorder preview">[\s\S]*?<\/div><a class="btn sm plain" href="#rec">Open the phone view full screen<\/a>/,'<div class="iph" aria-label="What your phone shows"><iframe src="'+(L?L.path+'?preview=1':'about:blank')+'" title="What your phone shows" style="width:100%;height:100%;border:0;pointer-events:none;border-radius:inherit" tabindex="-1"></iframe></div>'+(L?'<a class="btn sm plain" href="'+L.path+'" target="_blank" rel="noopener">Open the phone view</a>':''));
+    return h};
+  V.shoot.after=function(){shootAfterOrig();var s=S.approved[cur];if(!s)return;
+    var drop=document.getElementById('drop'),inp=document.getElementById('up-file');
+    if(drop){var d2=drop.cloneNode(true);drop.parentNode.replaceChild(d2,drop);drop=d2;
+      ['dragenter','dragover'].forEach(function(ev){drop.addEventListener(ev,function(e){e.preventDefault();drop.classList.add('over')})});
+      ['dragleave','drop'].forEach(function(ev){drop.addEventListener(ev,function(e){e.preventDefault();drop.classList.remove('over')})});
+      drop.addEventListener('drop',function(e){uploadLive(s,e.dataTransfer&&e.dataTransfer.files)})}
+    if(inp)inp.onchange=function(){uploadLive(s,inp.files);inp.value=''};
+    var dn=document.getElementById('done');if(dn){var n=liveTakes(s).length;dn.disabled=!n;var tk=document.getElementById('takes');if(tk)tk.textContent=n?n+' take'+(n>1?'s':'')+' ready':'No takes yet';
+      dn.onclick=function(){var it=S.approved.splice(cur,1)[0],ts=liveTakes(it);it.takeIds=ts.map(function(t){return t.id});it.clip=ts.length?ts[0].url:null;it.styleUsed=S.defStyle||S.style;S.edits.push(it);saveState();toast('Sent to edit');render()}}
+    if(!LSH.links[s.sid]||!s.sid)ensureSid(s).then(function(){return linkFor(s)}).then(function(){if(route()==='shoot'&&S.approved[cur]===s){var y=window.scrollY;render();window.scrollTo(0,y)}},function(e){var qd=document.getElementById('qr');if(qd)qd.innerHTML='<span class="faint" style="font-size:12px">'+esc(e.message)+'</span>'});
+    clearInterval(LSH.poll);refreshTakes();LSH.poll=setInterval(function(){if(route()!=='shoot'){clearInterval(LSH.poll);return}if(document.visibilityState==='visible')refreshTakes()},4000)};
+  deliveryCard=function(s){var ts=liveTakes(s);
+    var head='<div class="sec-h"><div><h2>Your takes</h2><p>Every take you record or upload lands here. Delivery scores for pace, filler words, eye contact and energy appear on each take once coaching is switched on.</p></div></div>';
+    if(!ts.length)return head+'<div class="glass pad coach-empty"><span class="faint">Scan the code and record, or upload a clip. Takes show up here a few seconds after they finish uploading.</span></div>';
+    return head+'<div class="glass pad"><div class="live-takes">'+ts.map(function(t,i){return '<figure class="ltake"><video src="'+esc(t.url)+'" controls playsinline preload="metadata"></video><figcaption><b>Take '+(ts.length-i)+'</b><span class="faint">'+(t.source==='phone'?'Phone':'Upload')+(t.seconds?' · '+mmss(t.seconds):'')+'</span></figcaption></figure>'}).join('')+'</div></div>'};
+}
 var ROUTES=['onboard','build','home','studio','shoot','edit','post','library','insights','brand','rec'];
 var SUB='';
 function route(){var h=location.hash.replace('#','').split('/');SUB=h[1]||'';h=h[0];if(h==='scenery')h='shoot';if(!S.onboarded&&h!=='build')return 'onboard';return ROUTES.indexOf(h)>-1?h:'home'}

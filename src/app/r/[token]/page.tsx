@@ -6,10 +6,11 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Frontman · Record", robots: { index: false, follow: false } };
 export const viewport: Viewport = { width: "device-width", initialScale: 1, maximumScale: 1, viewportFit: "cover", themeColor: "#000000" };
 
-export default async function RecordPage({ params }: { params: Promise<{ token: string }> }) {
+export default async function RecordPage({ params, searchParams }: { params: Promise<{ token: string }>; searchParams: Promise<{ preview?: string }> }) {
   const { token } = await params;
+  const { preview } = await searchParams;
   try {
-    const session = await phoneSession(token);
+    const session = await phoneSession(token, { preview: preview === "1" });
     return <Recorder token={token} session={session} />;
   } catch (e) {
     const message = e instanceof ShootError ? e.message : "Something went wrong opening this shoot. Scan the QR code again.";
